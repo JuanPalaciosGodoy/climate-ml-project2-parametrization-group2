@@ -31,7 +31,7 @@ def score_eval(hidds, lays, valid_x, valid_y, k_mean_c, k_std_c, cwd_output):
     for k, h in enumerate(hidds):
         for l, la in enumerate(lays):
             model_path = os.path.join(cwd_output, f'ensemble_models_layers{la}/mod_dir_{h}/model.pt')
-            model = torch.load(model_path, map_location=device)
+            model = torch.load(model_path, map_location=device, weights_only=False)
             model = model.to(device)
             y = model(valid_x)
 
