@@ -1,9 +1,91 @@
 # visualizations from sparse GPR analysis
 # in separate library for organization
 
-import matplotlib as plt
+import matplotlib.pyplot as plt
 import numpy as np
 
+def compare_models(model, gp_models, likelihoods, valid_x, valid_y, k_mean, k_std):
+    """
+    Compare predictions from the original NN model and the NN+GP hybrid model
+    """
+    device = valid_x.device
+    
+    # Set models to evaluation mode
+    model.eval()
+    for gp in gp_models:
+        gp.eval()
+    for likelihood in likelihoods:
+        likelihood.eval()
+    
+    # Get predictions from original NN
+    with torch.no_grad():
+        nn_pred = model(valid_x)
+        
+        # Get penultimate layer features for GP input
+        penultimate_features = model.penultimate(valid_x)
+        
+        # Get predictions from each GP model
+        gp_preds = []
+        gp_lower = []
+        gp_upper = []
+        
+        for i, (gp, likelihood) in enumerate(zip(gp_models, likelihoods)):
+            # Get GP predictions with uncertainty
+            pred_dist = likelihood(gp(penultimate_features))
+            gp_mean = pred_dist.mean
+            
+            # Get confidence intervals
+            lower, upper = pred_dist.confidence_region()
+            
+            gp_preds.append(gp_mean)
+            gp_lower.append(lower)
+            gp_upper.append(upper)
+        
+        # Stack predictions for all levels
+        gp_pred_stacked = torch.stack(gp_preds, dim=1)
+        gp_lower_stacked = torch.stack(gp_lower, dim=1)
+        gp_upper_stacked = torch.stack(gp_upper, dim=1)
+    
+    # Convert to numpy for metrics calculation
+    k_mean_t = torch.tensor(k_mean).to(device)
+    k_std_t = torch.tensor(k_std).to(device)
+    
+    nn_pred_orig = torch.exp(nn_pred * k_std_t + k_mean_t)
+    gp_pred_orig = torch.exp(gp_pred_stacked * k_std_t + k_mean_t)
+    valid_y_orig = torch.exp(valid_y * k_std_t + k_mean_t)
+    
+    gp_lower_orig = torch.exp(gp_lower_stacked * k_std_t + k_mean_t)
+    gp_upper_orig = torch.exp(gp_upper_stacked * k_std_t + k_mean_t)
+    
+    # Calculate metrics
+    nn_mae = torch.mean(torch.abs(nn_pred_orig - valid_y_orig)).item()
+    gp_mae = torch.mean(torch.abs(gp_pred_orig - valid_y_orig)).item()
+    
+    nn_rmse = torch.sqrt(torch.mean((nn_pred_orig - valid_y_orig)**2)).item()
+    gp_rmse = torch.sqrt(torch.mean((gp_pred_orig - valid_y_orig)**2)).item()
+    
+    # Convert to numpy
+    nn_pred_np = nn_pred_orig.cpu().numpy()
+    gp_pred_np = gp_pred_orig.cpu().numpy()
+    valid_y_np = valid_y_orig.cpu().numpy()
+    gp_lower_np = gp_lower_orig.cpu().numpy()
+    gp_upper_np = gp_upper_orig.cpu().numpy()
+    
+    # Create the results dictionary
+    results = {
+        'nn_pred': nn_pred_np,
+        'gp_pred': gp_pred_np,
+        'true_values': valid_y_np,
+        'gp_lower': gp_lower_np,
+        'gp_upper': gp_upper_np,
+        'nn_mae': nn_mae,
+        'gp_mae': gp_mae,
+        'nn_rmse': nn_rmse,
+        'gp_rmse': gp_rmse
+    }
+    
+    return results
+    
 # Cell 1: Overall Performance Metrics Comparison
 def plot_performance_metrics(results):
     """
