@@ -426,7 +426,7 @@ class DataStatistics(object):
         
             if model == 'ICA':
                 # Compute ICA
-                model_obj = FastICA(n_components=components, whiten="arbitrary-variance")
+                model_obj = FastICA(n_components=components, whiten="unit-variance")
         
             elif model == 'PCA':
                 # For comparison, compute PCA
